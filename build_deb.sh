@@ -13,7 +13,7 @@ STAGING="$ROOT/.deb_staging/$PACKAGE"
 
 cmake -S "$ROOT" -B "$BUILD" -DCMAKE_BUILD_TYPE=Release
 cmake --build "$BUILD" --parallel "$(nproc)"
-ctest --test-dir "$BUILD" --output-on-failure
+QT_QPA_PLATFORM=offscreen ctest --test-dir "$BUILD" --output-on-failure
 
 rm -rf "$ROOT/.deb_staging"
 mkdir -p "$STAGING/DEBIAN" \
