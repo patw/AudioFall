@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=AudioFall
+Comment=Local microphone transcription and meeting summarization
+Exec=audiofall
+Icon=audiofall
+Type=Application
+Categories=AudioVideo;Audio;Utility;
+Terminal=false

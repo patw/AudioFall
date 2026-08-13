@@ -1,11 +1,22 @@
 name: CI
+
 on:
   push:
     branches: [main, master]
   pull_request:
     branches: [main, master]
+
 jobs:
+  linux:
+    name: Linux build and tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y build-essential cmake qt6-base-dev qtmultimedia5-dev libgl-dev
+      - run: ./build_linux.sh
+
   macos:
+    name: macOS build and tests
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,3 +26,22 @@ jobs:
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
           cmake --build build --parallel
           ctest --test-dir build --output-on-failure
+
+  windows:
+    name: Windows build and tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.2'
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          modules: qtmultimedia
+      - uses: ilammy/msvc-dev-cmd@v1
+      - shell: cmd
+        run: |
+          cmake -S . -B build_windows -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="%QT_ROOT_DIR%"
+          cmake --build build_windows
+          ctest --test-dir build_windows --output-on-failure

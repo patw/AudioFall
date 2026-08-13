@@ -1,4 +1,42 @@
+# Build and package output
 build*/
 AudioFall.app/
+AudioFall-Windows/
+*.deb
 *.dmg
+*.AppImage
+*.zip
+
+# AppImage downloaded tools and staging output
+appimage/tools/
+appimage/AudioFall.AppDir/
+.deb_staging/
+.dmg_staging/
+
+# CMake / Qt generated output
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*_autogen/
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+
+# Compiled files and IDE metadata
+*.o
+*.obj
+*.a
+*.lib
+*.dll
+*.exe
+*.dylib
+*.so
+*.so.*
+.vscode/
+.idea/
+compile_commands.json
+
+# OS artifacts
 .DS_Store
+Thumbs.db

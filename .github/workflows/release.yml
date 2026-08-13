@@ -1,0 +1,90 @@
+# Publish native AudioFall artifacts when a version tag is pushed.
+# Example: git tag v0.1.0 && git push origin v0.1.0
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+env:
+  VERSION: ${{ github.ref_name }}
+
+jobs:
+  linux:
+    name: Linux (.deb + AppImage)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build and package dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake qt6-base-dev qtmultimedia5-dev libgl-dev \
+            dpkg-dev libfuse2 fuse3 imagemagick
+      - name: Build Debian package
+        run: ./build_deb.sh
+      - name: Download AppImage tooling
+        run: |
+          mkdir -p appimage/tools
+          wget -q -P appimage/tools https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          wget -q -P appimage/tools https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          chmod +x appimage/tools/*.AppImage
+      - name: Build AppImage
+        run: cd appimage && ./build.sh
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            audiofall_*.deb
+            AudioFall-x86_64.AppImage
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+
+  macos:
+    name: macOS (arm64 DMG)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Qt and CMake
+        run: |
+          export HOMEBREW_NO_REQUIRE_TAP_TRUST=1
+          brew install qt cmake
+      - name: Build ad-hoc-signed DMG
+        run: ./build_macos.sh arm64
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: AudioFall-macOS-arm64.dmg
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+
+  windows:
+    name: Windows (x64 ZIP)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Qt 6 with Multimedia
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.2'
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          modules: qtmultimedia
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Build, test, and bundle
+        shell: cmd
+        run: build_windows.bat
+      - name: Zip distribution
+        shell: powershell
+        run: Compress-Archive -Path AudioFall-Windows\* -DestinationPath AudioFall-Windows-${{ github.ref_name }}.zip
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: AudioFall-Windows-*.zip
+          generate_release_notes: true
+          fail_on_unmatched_files: true
