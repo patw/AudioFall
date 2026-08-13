@@ -21,10 +21,7 @@ if "%QT_ROOT_DIR%"=="" (
 
 set PATH=%QT_ROOT_DIR%\bin;%PATH%
 echo Using Qt: %QT_ROOT_DIR%
-cmake -S "%ROOT%" -B "%ROOT%build_windows" ^
-    -G Ninja ^
-    -DCMAKE_BUILD_TYPE=Release ^
-    -DCMAKE_PREFIX_PATH="%QT_ROOT_DIR%"
+cmake -S "%ROOT%" -B "%ROOT%build_windows" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="%QT_ROOT_DIR%"
 cmake --build "%ROOT%build_windows"
 set QT_QPA_PLATFORM=offscreen
 ctest --test-dir "%ROOT%build_windows" --output-on-failure
