@@ -13,5 +13,8 @@ struct AppConfig {
     QVector<SummaryStep> steps;
     static AppConfig defaults();
 };
+
 AppConfig loadConfig();
 bool saveConfig(const AppConfig &config, QString *error = nullptr);
+// Test-only override; an empty path restores the platform-standard location.
+void setConfigPathForTesting(const QString &path);

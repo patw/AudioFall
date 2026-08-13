@@ -6,9 +6,14 @@
 
 Recorder::Recorder(QObject *parent) : QObject(parent) {}
 
+Recorder::~Recorder() {
+    QString ignored;
+    stop(&ignored);
+}
+
 bool Recorder::start(const QAudioDevice &device, const QString &path, QString *error) {
     if (source_) {
-        if (error) *error = "Recording is already active";
+        if (error) *error = "Recording is already active.";
         return false;
     }
 
@@ -22,41 +27,87 @@ bool Recorder::start(const QAudioDevice &device, const QString &path, QString *e
     }
 
     file_ = new QFile(path, this);
-    if (!file_->open(QIODevice::WriteOnly)) {
+    if (!file_->open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         if (error) *error = file_->errorString();
         file_->deleteLater();
         file_ = nullptr;
         return false;
     }
 
+    path_ = path;
     source_ = new QAudioSource(device, format, this);
     connect(source_, &QAudioSource::stateChanged, this, [this](QAudio::State state) {
-        if (state == QAudio::StoppedState && source_ && source_->error() != QAudio::NoError)
-            emit errorOccurred("The microphone stream stopped unexpectedly.");
+        if (state != QAudio::StoppedState || !source_ || source_->error() == QAudio::NoError)
+            return;
+        const QString message = "The microphone stream stopped unexpectedly; the recording was discarded.";
+        discardCapture();
+        emit errorOccurred(message);
     });
     source_->start(file_);
-    path_ = path;
+
+    if (source_->state() == QAudio::StoppedState && source_->error() != QAudio::NoError) {
+        const QString message = "Could not start the microphone stream.";
+        discardCapture();
+        if (error) *error = message;
+        return false;
+    }
     return true;
 }
 
-void Recorder::stop() {
-    if (!source_) return;
+bool Recorder::stop(QString *error) {
+    if (!source_) return true;
+
     source_->stop();
     file_->close();
 
     QFile raw(path_);
-    QByteArray pcm;
-    if (raw.open(QIODevice::ReadOnly))
-        pcm = raw.readAll();
-    else
-        emit errorOccurred("Could not read captured audio: " + raw.errorString());
+    if (!raw.open(QIODevice::ReadOnly)) {
+        const QString message = "Could not read captured audio: " + raw.errorString();
+        discardCapture();
+        if (error) *error = message;
+        emit errorOccurred(message);
+        return false;
+    }
+    const QByteArray pcm = raw.readAll();
+    raw.close();
 
-    QString error;
-    if (!Wav::writePcm16Mono(path_, pcm, 16000, &error))
-        emit errorOccurred("Could not finalize WAV: " + error);
+    if (pcm.isEmpty()) {
+        const QString message = "No microphone audio was captured; the empty recording was discarded.";
+        discardCapture();
+        if (error) *error = message;
+        emit errorOccurred(message);
+        return false;
+    }
+
+    QString wavError;
+    if (!Wav::writePcm16Mono(path_, pcm, 16000, &wavError)) {
+        const QString message = "Could not finalize WAV: " + wavError;
+        discardCapture();
+        if (error) *error = message;
+        emit errorOccurred(message);
+        return false;
+    }
 
     source_->deleteLater();
     file_->deleteLater();
     source_ = nullptr;
     file_ = nullptr;
+    path_.clear();
+    return true;
+}
+
+void Recorder::discardCapture() {
+    const QString path = path_;
+    if (source_) {
+        source_->stop();
+        source_->deleteLater();
+    }
+    if (file_) {
+        file_->close();
+        file_->deleteLater();
+    }
+    source_ = nullptr;
+    file_ = nullptr;
+    path_.clear();
+    if (!path.isEmpty()) QFile::remove(path);
 }

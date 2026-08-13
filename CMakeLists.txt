@@ -25,8 +25,15 @@ set_target_properties(audiofall PROPERTIES MACOSX_BUNDLE TRUE)
 find_package(Qt6 COMPONENTS Test QUIET)
 if (Qt6Test_FOUND)
     enable_testing()
-    add_executable(audiofall_tests tests/tests.cpp ${AUDIOFALL_CORE})
-    target_link_libraries(audiofall_tests PRIVATE Qt6::Core Qt6::Network Qt6::Test)
+    add_executable(audiofall_tests
+        tests/tests.cpp
+        src/mainwindow.cpp
+        src/recorder.cpp
+        ${AUDIOFALL_CORE}
+    )
+    target_link_libraries(audiofall_tests PRIVATE
+        Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Multimedia Qt6::Test
+    )
     target_include_directories(audiofall_tests PRIVATE src)
     add_test(NAME AudioFallTests COMMAND audiofall_tests)
 endif()
