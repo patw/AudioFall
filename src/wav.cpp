@@ -24,7 +24,6 @@ bool Wav::removeSilence(const QString &path,double thresholdDb,double minSilence
  const int count=p.data.size()/2, window=qMax(1,qRound(p.rate*.025)), pad=qRound(padding*p.rate); const double threshold=32767.0*std::pow(10.0,thresholdDb/20.0); QVector<bool> loud;
  for(int start=0;start<count;start+=window){int end=qMin(count,start+window);double sum=0;for(int i=start;i<end;++i){qint16 x=qFromLittleEndian<qint16>((const uchar*)p.data.constData()+i*2);sum+=double(x)*x;} loud.append(std::sqrt(sum/(end-start))>=threshold);}
  QVector<QPair<int,int>> regions; int speech=-1,quiet=-1; for(int i=0;i<loud.size();++i){int start=i*window,end=qMin(count,start+window);if(loud[i]){if(speech<0)speech=start;quiet=-1;}else if(speech>=0){if(quiet<0)quiet=start;if(end-quiet>=minSilence*p.rate){regions.append({qMax(0,speech-pad),qMin(count,quiet+pad)});speech=-1;quiet=-1;}}} if(speech>=0)regions.append({qMax(0,speech-pad),count}); if(regions.empty())return true;
- QByteArray trimmed;int last=-1;for(auto r:regions){if(last>=0&&r.first<=last){last=qMax(last,r.second);continue;}if(last>=0)trimmed.append(p.data.mid((last==r.first?0:0),0)); // no-op; merged below
- }
+ QByteArray trimmed;
  QVector<QPair<int,int>> merged;for(auto r:regions){if(!merged.empty()&&r.first<=merged.last().second)merged.last().second=qMax(merged.last().second,r.second);else merged.append(r);}for(auto r:merged)trimmed.append(p.data.mid(r.first*2,(r.second-r.first)*2));return writePcm16Mono(path,trimmed,p.rate,err);
 }
