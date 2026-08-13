@@ -20,7 +20,7 @@ mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/share/applications" \
 
 cmake -S "$PROJECT_ROOT" -B "$BUILD" -DCMAKE_BUILD_TYPE=Release
 cmake --build "$BUILD" --parallel "$(nproc)"
-ctest --test-dir "$BUILD" --output-on-failure
+QT_QPA_PLATFORM=offscreen ctest --test-dir "$BUILD" --output-on-failure
 
 install -m 755 "$BUILD/audiofall" "$APPDIR/usr/bin/audiofall"
 install -m 644 "$ROOT/audiofall.desktop" "$APPDIR/usr/share/applications/audiofall.desktop"

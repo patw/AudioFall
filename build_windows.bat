@@ -21,16 +21,13 @@ if "%QT_ROOT_DIR%"=="" (
 
 set PATH=%QT_ROOT_DIR%\bin;%PATH%
 echo Using Qt: %QT_ROOT_DIR%
-if not exist build_windows mkdir build_windows
-pushd build_windows
-cmake .. ^
-    -G "Visual Studio 17 2022" ^
-    -A x64 ^
+cmake -S "%ROOT%" -B "%ROOT%build_windows" ^
+    -G Ninja ^
+    -DCMAKE_BUILD_TYPE=Release ^
     -DCMAKE_PREFIX_PATH="%QT_ROOT_DIR%"
-cmake --build . --config Release
+cmake --build "%ROOT%build_windows"
 set QT_QPA_PLATFORM=offscreen
-ctest -C Release --output-on-failure
-popd
+ctest --test-dir "%ROOT%build_windows" --output-on-failure
 
 set DIST=%ROOT%AudioFall-Windows
 if exist "%DIST%" rmdir /s /q "%DIST%"
