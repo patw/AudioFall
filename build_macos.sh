@@ -12,8 +12,8 @@ cmake --build "$ROOT/build_macos" --parallel "$(sysctl -n hw.ncpu)"
 ctest --test-dir "$ROOT/build_macos" --output-on-failure
 APP="$ROOT/AudioFall.app"
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$ROOT/build_macos/audiofall" "$APP/Contents/MacOS/AudioFall"
+cp -R "$ROOT/build_macos/audiofall.app" "$APP"
+mv "$APP/Contents/MacOS/audiofall" "$APP/Contents/MacOS/AudioFall"
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

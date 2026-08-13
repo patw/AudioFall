@@ -9,6 +9,9 @@
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QInputDialog>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMediaDevices>
@@ -101,6 +104,8 @@ void MainWindow::showSettings() {
     auto *out = make("Output directory", config_.outputDir); auto *whisper = make("Whisper URL", config_.whisperUrl);
     auto *llm = make("LLM base URL", config_.llmUrl); auto *key = make("LLM API key", config_.llmApiKey);
     auto *model = make("LLM model", config_.llmModel); auto *system = make("System message", config_.systemMessage);
+    QString stepsJson; { QJsonArray values; for (const auto &step : config_.steps) values.append(QJsonObject{{"name", step.name}, {"prompt", step.prompt}}); stepsJson = QString::fromUtf8(QJsonDocument(values).toJson(QJsonDocument::Indented)); }
+    auto *steps = make("Summary steps (JSON)", stepsJson);
     layout->addWidget(tabs);
     auto *buttons = new QHBoxLayout; auto *ok = new QPushButton("Save"); auto *cancel = new QPushButton("Cancel");
     buttons->addStretch(); buttons->addWidget(ok); buttons->addWidget(cancel); layout->addLayout(buttons);
@@ -108,5 +113,10 @@ void MainWindow::showSettings() {
     if (dialog.exec() != QDialog::Accepted) return;
     config_.outputDir = out->toPlainText().trimmed(); config_.whisperUrl = whisper->toPlainText().trimmed(); config_.llmUrl = llm->toPlainText().trimmed();
     config_.llmApiKey = key->toPlainText().trimmed(); config_.llmModel = model->toPlainText().trimmed(); config_.systemMessage = system->toPlainText().trimmed();
+    QJsonParseError parseError; QJsonDocument stepsDocument = QJsonDocument::fromJson(steps->toPlainText().toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !stepsDocument.isArray()) { QMessageBox::warning(this, "Settings", "Summary steps must be a JSON array of {name, prompt} objects."); return; }
+    QVector<SummaryStep> parsedSteps; for (const auto &value : stepsDocument.array()) { const auto object = value.toObject(); const QString name = object.value("name").toString().trimmed(); const QString prompt = object.value("prompt").toString(); if (name.isEmpty() || prompt.isEmpty()) { QMessageBox::warning(this, "Settings", "Every summary step requires a name and prompt."); return; } parsedSteps.append({name, prompt}); }
+    if (parsedSteps.isEmpty()) { QMessageBox::warning(this, "Settings", "At least one summary step is required."); return; }
+    config_.steps = parsedSteps;
     QString error; if (!saveConfig(config_, &error)) QMessageBox::warning(this, "Settings", error); else log("Settings saved.");
 }
