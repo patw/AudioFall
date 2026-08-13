@@ -3,8 +3,7 @@ REM Build a self-contained Windows x64 distribution.
 REM Run this from a Visual Studio 2022 Developer Command Prompt.
 REM Prerequisites: CMake and Qt 6 MSVC 2022 x64 (including Multimedia).
 setlocal enabledelayedexpansion
-set ROOT=%~dp0
-cd /d "%ROOT%"
+cd /d "%~dp0"
 
 REM install-qt-action supplies QT_ROOT_DIR. For a local installation, set
 REM QT6_DIR to a directory such as C:\Qt\6.8.2\msvc2022_64.
@@ -21,16 +20,16 @@ if "%QT_ROOT_DIR%"=="" (
 
 set PATH=%QT_ROOT_DIR%\bin;%PATH%
 echo Using Qt: %QT_ROOT_DIR%
-cmake -S "%ROOT%" -B "%ROOT%build_windows" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="%QT_ROOT_DIR%"
-cmake --build "%ROOT%build_windows"
+cmake -S . -B build_windows -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="%QT_ROOT_DIR%"
+cmake --build build_windows
 set QT_QPA_PLATFORM=offscreen
-ctest --test-dir "%ROOT%build_windows" --output-on-failure
+ctest --test-dir build_windows --output-on-failure
 
-set DIST=%ROOT%AudioFall-Windows
+set DIST=AudioFall-Windows
 if exist "%DIST%" rmdir /s /q "%DIST%"
 mkdir "%DIST%"
-copy "%ROOT%build_windows\Release\audiofall.exe" "%DIST%\AudioFall.exe" >nul
-copy "%ROOT%assets\audiofall.png" "%DIST%\audiofall.png" >nul
+copy "build_windows\audiofall.exe" "%DIST%\AudioFall.exe" >nul
+copy "assets\audiofall.png" "%DIST%\audiofall.png" >nul
 pushd "%DIST%"
 windeployqt --release --compiler-runtime AudioFall.exe
 popd
