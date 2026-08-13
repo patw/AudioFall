@@ -22,7 +22,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            build-essential cmake qt6-base-dev qtmultimedia5-dev libgl-dev \
+            build-essential cmake qt6-base-dev qt6-multimedia-dev libgl-dev \
             dpkg-dev libfuse2 fuse3 imagemagick
       - name: Build Debian package
         run: ./build_deb.sh
