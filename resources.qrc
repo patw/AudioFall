@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/icons">
+        <file alias="audiofall-headphones.png">assets/audiofall-headphones.png</file>
+    </qresource>
+</RCC>

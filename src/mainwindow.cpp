@@ -4,10 +4,12 @@
 #include "recorder.h"
 #include <QAudioDevice>
 #include <QCloseEvent>
+#include <QColor>
 #include <QComboBox>
 #include <QDialog>
 #include <QDir>
 #include <QFileInfo>
+#include <QFont>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QInputDialog>
@@ -18,43 +20,54 @@
 #include <QLineEdit>
 #include <QMediaDevices>
 #include <QMessageBox>
+#include <QPalette>
 #include <QPlainTextEdit>
 #include <QPushButton>
-#include <QTabWidget>
 #include <QTextEdit>
+#include <QTabWidget>
 #include <QThread>
 #include <QVBoxLayout>
 #include <QWidget>
 
 MainWindow::MainWindow() : config_(loadConfig()), recorder_(new Recorder(this)) {
-    setWindowTitle("AudioFall");
-    resize(700, 460);
-    auto *central = new QWidget(this);
-    auto *layout = new QVBoxLayout(central);
-    auto *title = new QLabel("<h2>AudioFall</h2><p>Local meeting recorder, transcription, and summaries.</p>");
-    layout->addWidget(title);
+    // Match AudioSumma's compact, native Qt layout rather than adding a custom header.
+    setWindowTitle("Meeting Recorder");
+    resize(500, 400);
+    setMinimumWidth(500);
 
+    auto *central = new QWidget(this);
+    // PyQt5's macOS widget window uses a light system-gray content surface;
+    // Qt6 otherwise renders this central widget as pure white.
+    QPalette centralPalette = central->palette();
+    centralPalette.setColor(QPalette::Window, QColor("#ECECEC"));
+    central->setPalette(centralPalette);
+    central->setAutoFillBackground(true);
+    auto *layout = new QVBoxLayout(central);
+
+    layout->addWidget(new QLabel("Activity"));
     activity_ = new QPlainTextEdit;
     activity_->setReadOnly(true);
     activity_->setMaximumBlockCount(1000);
-    activity_->setMinimumHeight(220);
-    layout->addWidget(new QLabel("Activity"));
+    activity_->setMinimumHeight(180);
     layout->addWidget(activity_);
 
     auto *row = new QHBoxLayout;
-    status_ = new QLabel("● Idle");
+    status_ = new QLabel("🟢");
+    status_->setFont(QFont("Apple Color Emoji", 63));
+    status_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    status_->setMinimumWidth(108);
+    status_->setToolTip("Not recording");
+    row->addWidget(status_);
     devices_ = new QComboBox;
     refreshDevices();
-    row->addWidget(status_);
-    row->addWidget(new QLabel("Microphone:"));
-    row->addWidget(devices_, 1);
+    row->addWidget(devices_);
     layout->addLayout(row);
 
     auto *buttons = new QHBoxLayout;
     auto *settings = new QPushButton("Settings");
     record_ = new QPushButton("Record");
-    process_ = new QPushButton("Transcribe & Summarize");
-    clean_ = new QPushButton("Clean Intermediates");
+    process_ = new QPushButton("Transcribe");
+    clean_ = new QPushButton("Clean");
     buttons->addWidget(settings);
     buttons->addWidget(record_);
     buttons->addWidget(process_);
@@ -100,7 +113,8 @@ void MainWindow::setBusy(bool busy) {
     process_->setEnabled(!busy);
     record_->setEnabled(!busy && !recorder_->isRecording());
     clean_->setEnabled(!busy);
-    status_->setText(busy ? "● Processing" : "● Idle");
+    status_->setText(busy ? "🟡" : "🟢");
+    status_->setToolTip(busy ? "Processing" : "Not recording");
 }
 
 void MainWindow::toggleRecording() {
@@ -112,7 +126,8 @@ void MainWindow::toggleRecording() {
             log("Recording discarded: " + error);
         record_->setText("Record");
         devices_->setEnabled(true);
-        status_->setText("● Idle");
+        status_->setText("🟢");
+        status_->setToolTip("Not recording");
         return;
     }
 
@@ -152,7 +167,8 @@ void MainWindow::toggleRecording() {
     }
     record_->setText("Stop Recording");
     devices_->setEnabled(false);
-    status_->setText("● Recording");
+    status_->setText("🔴");
+    status_->setToolTip("Recording");
     log("Recording to " + name + "…");
 }
 
@@ -184,37 +200,63 @@ void MainWindow::clean() {
 
 void MainWindow::showSettings() {
     QDialog dialog(this);
-    dialog.setWindowTitle("AudioFall Settings");
-    dialog.resize(650, 500);
+    dialog.setWindowTitle("Settings");
+    dialog.resize(600, 400);
     auto *layout = new QVBoxLayout(&dialog);
     auto *tabs = new QTabWidget;
-    auto make = [&tabs](const QString &label, QString &value) {
-        auto *w = new QWidget;
-        auto *f = new QFormLayout(w);
-        auto *e = new QTextEdit(value);
-        e->setMinimumHeight(55);
-        f->addRow(label, e);
-        tabs->addTab(w, label);
-        return e;
+    auto makeEditor = [](const QString &value, int height = 60) {
+        auto *editor = new QTextEdit(value);
+        editor->setMinimumSize(500, height);
+        editor->setLineWrapMode(QTextEdit::WidgetWidth);
+        return editor;
     };
 
-    auto *out = make("Output directory", config_.outputDir);
-    auto *whisper = make("Whisper URL", config_.whisperUrl);
-    auto *llm = make("LLM base URL", config_.llmUrl);
-    auto *key = make("LLM API key", config_.llmApiKey);
-    auto *model = make("LLM model", config_.llmModel);
-    auto *system = make("System message", config_.systemMessage);
-    QJsonArray values;
-    for (const auto &step : config_.steps)
-        values.append(QJsonObject{{"name", step.name}, {"prompt", step.prompt}});
-    QString stepsJson = QString::fromUtf8(QJsonDocument(values).toJson(QJsonDocument::Indented));
-    auto *steps = make("Summary steps (JSON)", stepsJson);
+    auto *llmTab = new QWidget;
+    auto *llmForm = new QFormLayout(llmTab);
+    llmForm->setSpacing(8);
+    auto *llm = makeEditor(config_.llmUrl);
+    auto *key = makeEditor(config_.llmApiKey);
+    auto *model = makeEditor(config_.llmModel);
+    llmForm->addRow("Base URL:", llm);
+    llmForm->addRow("API Key:", key);
+    llmForm->addRow("Model:", model);
+    tabs->addTab(llmTab, "LLM");
+
+    auto *whisperTab = new QWidget;
+    auto *whisperForm = new QFormLayout(whisperTab);
+    whisperForm->setSpacing(8);
+    auto *whisper = makeEditor(config_.whisperUrl);
+    whisperForm->addRow("URL:", whisper);
+    tabs->addTab(whisperTab, "Whisper");
+
+    auto *promptsTab = new QWidget;
+    auto *promptsForm = new QFormLayout(promptsTab);
+    promptsForm->setSpacing(8);
+    auto *system = makeEditor(config_.systemMessage, 80);
+    promptsForm->addRow("System Message:", system);
+    QVector<QLineEdit *> stepNames;
+    QVector<QTextEdit *> stepPrompts;
+    for (const auto &step : config_.steps) {
+        auto *name = new QLineEdit(step.name);
+        auto *prompt = makeEditor(step.prompt, 80);
+        stepNames.append(name);
+        stepPrompts.append(prompt);
+        promptsForm->addRow("Step Name:", name);
+        promptsForm->addRow("Prompt:", prompt);
+    }
+    tabs->addTab(promptsTab, "Prompts");
+
+    auto *generalTab = new QWidget;
+    auto *generalForm = new QFormLayout(generalTab);
+    generalForm->setSpacing(8);
+    auto *out = makeEditor(config_.outputDir);
+    generalForm->addRow("Output Directory:", out);
+    tabs->addTab(generalTab, "General Settings");
     layout->addWidget(tabs);
 
     auto *buttons = new QHBoxLayout;
     auto *save = new QPushButton("Save");
     auto *cancel = new QPushButton("Cancel");
-    buttons->addStretch();
     buttons->addWidget(save);
     buttons->addWidget(cancel);
     layout->addLayout(buttons);
@@ -222,24 +264,17 @@ void MainWindow::showSettings() {
     connect(cancel, &QPushButton::clicked, &dialog, &QDialog::reject);
     if (dialog.exec() != QDialog::Accepted) return;
 
-    config_.outputDir = out->toPlainText().trimmed();
-    config_.whisperUrl = whisper->toPlainText().trimmed();
-    config_.llmUrl = llm->toPlainText().trimmed();
-    config_.llmApiKey = key->toPlainText().trimmed();
-    config_.llmModel = model->toPlainText().trimmed();
-    config_.systemMessage = system->toPlainText().trimmed();
+    config_.outputDir = out->toPlainText();
+    config_.whisperUrl = whisper->toPlainText();
+    config_.llmUrl = llm->toPlainText();
+    config_.llmApiKey = key->toPlainText();
+    config_.llmModel = model->toPlainText();
+    config_.systemMessage = system->toPlainText();
 
-    QJsonParseError parseError;
-    QJsonDocument stepsDocument = QJsonDocument::fromJson(steps->toPlainText().toUtf8(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !stepsDocument.isArray()) {
-        QMessageBox::warning(this, "Settings", "Summary steps must be a JSON array of {name, prompt} objects.");
-        return;
-    }
     QVector<SummaryStep> parsedSteps;
-    for (const auto &value : stepsDocument.array()) {
-        const auto object = value.toObject();
-        const QString name = object.value("name").toString().trimmed();
-        const QString prompt = object.value("prompt").toString();
+    for (qsizetype i = 0; i < stepNames.size(); ++i) {
+        const QString name = stepNames.at(i)->text();
+        const QString prompt = stepPrompts.at(i)->toPlainText();
         if (name.isEmpty() || prompt.isEmpty()) {
             QMessageBox::warning(this, "Settings", "Every summary step requires a name and prompt.");
             return;

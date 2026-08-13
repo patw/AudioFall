@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(AudioFall VERSION 0.1.0 LANGUAGES CXX)
+project(AudioFall VERSION 0.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -13,7 +13,7 @@ set(AUDIOFALL_CORE
 )
 
 add_executable(audiofall
-    src/main.cpp src/mainwindow.cpp src/recorder.cpp
+    src/main.cpp src/mainwindow.cpp src/recorder.cpp resources.qrc
     ${AUDIOFALL_CORE}
 )
 target_link_libraries(audiofall PRIVATE
