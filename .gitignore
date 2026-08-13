@@ -1,0 +1,4 @@
+build*/
+AudioFall.app/
+*.dmg
+.DS_Store
