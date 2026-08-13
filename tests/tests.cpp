@@ -130,6 +130,26 @@ private slots:
         QVERIFY(content.contains("result:Summary: hello"));
     }
 
+    void pipelineEmitsLifecycleActivityOnce() {
+        QTemporaryDir dir;
+        ProcessingPipeline pipeline(configFor(dir.path()), nullptr, {},
+            [](const QString &) { return QString(); },
+            [](const QString &) { return QString(); });
+        QSignalSpy activity(&pipeline, &ProcessingPipeline::activity);
+        QSignalSpy finished(&pipeline, &ProcessingPipeline::finished);
+
+        pipeline.run();
+
+        QStringList messages;
+        for (const auto &entry : activity)
+            messages.append(entry.at(0).toString());
+        QCOMPARE(messages.count("Starting transcription and summarization…"), 1);
+        QCOMPARE(messages.count("Processing complete"), 1);
+        QCOMPARE(finished.count(), 1);
+        QVERIFY(finished.at(0).at(0).toBool());
+        QCOMPARE(finished.at(0).at(1).toString(), QString());
+    }
+
     void pipelineCleanRetainsMarkdown() {
         QTemporaryDir dir;
         for (const QString &name : {"call.wav", "call.tns", "summary.md"}) {

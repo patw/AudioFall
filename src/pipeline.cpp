@@ -105,6 +105,7 @@ QString ProcessingPipeline::renderPrompt(const QString &templ, const QString &tr
 }
 
 void ProcessingPipeline::run() {
+    emit activity("Starting transcription and summarization…");
     try {
         QDir dir(config_.outputDir);
         if (!dir.exists() && !QDir().mkpath(config_.outputDir))
@@ -155,7 +156,8 @@ void ProcessingPipeline::run() {
             if (summary.write(section.toUtf8()) < 0) throw std::runtime_error(summary.errorString().toStdString());
             existing += section;
         }
-        emit finished(true, "Processing complete");
+        emit activity("Processing complete");
+        emit finished(true, {});
     } catch (const std::exception &e) {
         emit finished(false, QString::fromUtf8(e.what()));
     }

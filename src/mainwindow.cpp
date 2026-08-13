@@ -158,7 +158,6 @@ void MainWindow::toggleRecording() {
 
 void MainWindow::process() {
     setBusy(true);
-    log("Starting transcription and summarization…");
 
     processingThread_ = new QThread(this);
     auto *pipeline = new ProcessingPipeline(config_);
@@ -166,7 +165,7 @@ void MainWindow::process() {
     connect(processingThread_, &QThread::started, pipeline, &ProcessingPipeline::run);
     connect(pipeline, &ProcessingPipeline::activity, this, &MainWindow::log);
     connect(pipeline, &ProcessingPipeline::finished, this, [this, pipeline](bool success, const QString &message) {
-        log((success ? "" : "Processing failed: ") + message);
+        if (!success) log("Processing failed: " + message);
         setBusy(false);
         processingThread_->quit();
         pipeline->deleteLater();
