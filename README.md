@@ -10,6 +10,8 @@ It is a clean C++ implementation: no Python, virtual environment, pip packages, 
 - A Whisper-compatible endpoint; default: `http://localhost:8081/inference`.
 - An OpenAI-compatible chat-completions endpoint; default: `http://localhost:8080/v1`.
 
+See [Running a local whisper.cpp server](docs/local-whisper.md) for the reference model, macOS `launchd` setup, and Linux/Windows service instructions. See [LLM providers and local summarization](docs/llm-providers.md) for hosted OpenAI-compatible providers, Anthropic compatibility notes, and local Ollama/llama.cpp options.
+
 The app requests **16 kHz mono signed-16-bit PCM** from the selected microphone. The current native implementation explicitly rejects devices that cannot provide that format rather than silently recording an incompatible WAV.
 
 Settings are stored as independent JSON in the operating system's application-config location.
