@@ -10,6 +10,8 @@ struct AppConfig {
     QString llmApiKey = "doesntmatter";
     QString llmModel = "whatever";
     QString systemMessage = "You are a friendly assistant that summarizes call transcripts.";
+    double silenceThresholdDb = -40.0;
+    double silenceMinSeconds = 5.0;
     QVector<SummaryStep> steps;
     static AppConfig defaults();
 };

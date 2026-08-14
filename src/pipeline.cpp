@@ -112,7 +112,9 @@ void ProcessingPipeline::run() {
             throw std::runtime_error("Could not create output directory");
 
         for (const auto &name : dir.entryList({"*.wav"}, QDir::Files, QDir::Name)) {
+            if (name.endsWith(".trimmed.wav", Qt::CaseInsensitive)) continue;
             const QString wav = dir.filePath(name);
+            const QString trimmedWav = wav.left(wav.size() - 4) + ".trimmed.wav";
             const QString transcriptPath = wav.left(wav.size() - 4) + ".tns";
             if (QFile::exists(transcriptPath)) {
                 emit activity("Skipping " + name + ", transcript already exists");
@@ -120,10 +122,10 @@ void ProcessingPipeline::run() {
             }
             emit activity("Trimming silence: " + name);
             QString error;
-            const bool trimmed = trimOverride_ ? trimOverride_(wav, &error) : Wav::removeSilence(wav, -40, 1, .15, &error);
+            const bool trimmed = trimOverride_ ? trimOverride_(wav, trimmedWav, &error) : Wav::removeSilence(wav, trimmedWav, config_.silenceThresholdDb, config_.silenceMinSeconds, .5, &error);
             if (!trimmed) throw std::runtime_error(error.toStdString());
             emit activity("Transcribing: " + name);
-            const QString text = transcribe(wav);
+            const QString text = transcribe(trimmedWav);
             QSaveFile output(transcriptPath);
             if (!output.open(QIODevice::WriteOnly)) throw std::runtime_error(output.errorString().toStdString());
             output.write(text.toUtf8());
@@ -165,7 +167,7 @@ void ProcessingPipeline::run() {
 
 void ProcessingPipeline::clean() {
     QDir dir(config_.outputDir);
-    for (const auto &name : dir.entryList({"*.wav", "*.tns"}, QDir::Files)) {
+    for (const auto &name : dir.entryList({"*.wav", "*.trimmed.wav", "*.tns"}, QDir::Files)) {
         if (QFile::remove(dir.filePath(name))) emit activity("Deleted: " + name);
         else emit activity("Could not delete: " + name);
     }

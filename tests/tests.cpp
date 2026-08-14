@@ -45,41 +45,71 @@ private slots:
 
     void longSilenceIsRemoved() {
         QTemporaryDir dir;
-        QString path = dir.filePath("meeting.wav"), error;
-        QVERIFY(Wav::writePcm16Mono(path, pcm({{1, 4000}, {.25, 0}, {1, 4000}, {2, 0}, {1, 4000}}), 16000, &error));
-        QVERIFY2(Wav::removeSilence(path, -40, 1, .1, &error), qPrintable(error));
-        QVERIFY(qAbs(frames(path) / 16000.0 - 3.45) < .08);
+        QString path = dir.filePath("meeting.wav");
+        QString trimmedPath = dir.filePath("meeting.trimmed.wav");
+        QString error;
+        QVERIFY(Wav::writePcm16Mono(path, pcm({{1, 4000}, {.25, 0}, {1, 4000}, {6, 0}, {1, 4000}}), 16000, &error));
+        QVERIFY2(Wav::removeSilence(path, trimmedPath, -40, 5, .1, &error), qPrintable(error));
+        QVERIFY(qAbs(frames(trimmedPath) / 16000.0 - 3.45) < .08);
     }
 
-    void shortPauseIsPreserved() {
+    void pauseUnderFiveSecondsIsPreserved() {
         QTemporaryDir dir;
-        QString path = dir.filePath("meeting.wav"), error;
-        const QByteArray source = pcm({{1, 4000}, {.2, 0}, {1, 4000}});
+        QString path = dir.filePath("meeting.wav");
+        QString trimmedPath = dir.filePath("meeting.trimmed.wav");
+        QString error;
+        const QByteArray source = pcm({{1, 4000}, {4, 0}, {1, 4000}});
         QVERIFY(Wav::writePcm16Mono(path, source, 16000, &error));
-        QVERIFY(Wav::removeSilence(path, -40, 1, .15, &error));
-        QFile file(path);
-        QVERIFY(file.open(QIODevice::ReadOnly));
-        QVERIFY(file.readAll().endsWith(source));
+        QVERIFY(Wav::removeSilence(path, trimmedPath, -40, 5, .15, &error));
+        QFile original(path);
+        QVERIFY(original.open(QIODevice::ReadOnly));
+        const QByteArray expected = original.readAll();
+        original.close();
+        QFile trimmed(trimmedPath);
+        QVERIFY(trimmed.open(QIODevice::ReadOnly));
+        QCOMPARE(trimmed.readAll(), expected);
     }
 
-    void allSilenceIsUnchanged() {
+    void allSilenceIsCopied() {
         QTemporaryDir dir;
-        QString path = dir.filePath("silent.wav"), error;
+        QString path = dir.filePath("silent.wav");
+        QString trimmedPath = dir.filePath("silent.trimmed.wav");
+        QString error;
         QVERIFY(Wav::writePcm16Mono(path, pcm({{2, 0}}), 16000, &error));
         QFile file(path);
         QVERIFY(file.open(QIODevice::ReadOnly));
         const QByteArray before = file.readAll();
-        QVERIFY(Wav::removeSilence(path, -40, 1, .15, &error));
         file.close();
-        QVERIFY(file.open(QIODevice::ReadOnly));
-        QCOMPARE(file.readAll(), before);
+        QVERIFY(Wav::removeSilence(path, trimmedPath, -40, 5, .15, &error));
+        QFile trimmed(trimmedPath);
+        QVERIFY(trimmed.open(QIODevice::ReadOnly));
+        QCOMPARE(trimmed.readAll(), before);
+    }
+
+    void trimmingPreservesOriginal() {
+        QTemporaryDir dir;
+        QString path = dir.filePath("meeting.wav");
+        QString trimmedPath = dir.filePath("meeting.trimmed.wav");
+        QString error;
+        const QByteArray source = pcm({{1, 4000}, {6, 0}, {1, 4000}});
+        QVERIFY(Wav::writePcm16Mono(path, source, 16000, &error));
+        QVERIFY(Wav::removeSilence(path, trimmedPath, -40, 5, .15, &error));
+        QFile original(path);
+        QVERIFY(original.open(QIODevice::ReadOnly));
+        const QByteArray after = original.readAll();
+        QVERIFY(after.endsWith(source));
+        QCOMPARE(after.size(), 44 + source.size());
+        QVERIFY(QFile::exists(trimmedPath));
+        QVERIFY(frames(trimmedPath) < frames(path));
     }
 
     void invalidParametersFail() {
         QTemporaryDir dir;
-        QString path = dir.filePath("meeting.wav"), error;
+        QString path = dir.filePath("meeting.wav");
+        QString trimmedPath = dir.filePath("meeting.trimmed.wav");
+        QString error;
         QVERIFY(Wav::writePcm16Mono(path, pcm({{1, 4000}}), 16000, &error));
-        QVERIFY(!Wav::removeSilence(path, std::numeric_limits<double>::quiet_NaN(), 1, .15, &error));
+        QVERIFY(!Wav::removeSilence(path, trimmedPath, std::numeric_limits<double>::quiet_NaN(), 5, .15, &error));
         QVERIFY(!error.isEmpty());
     }
 
@@ -97,7 +127,7 @@ private slots:
         transcript.close();
         int trimCount = 0, transcribeCount = 0;
         ProcessingPipeline pipeline(configFor(dir.path()), nullptr,
-            [&trimCount](const QString &, QString *) { ++trimCount; return true; },
+            [&trimCount](const QString &, const QString &, QString *) { ++trimCount; return true; },
             [&transcribeCount](const QString &) { ++transcribeCount; return QString("new transcript"); },
             [](const QString &) { return QString("summary"); });
         QSignalSpy finished(&pipeline, &ProcessingPipeline::finished);
@@ -150,9 +180,76 @@ private slots:
         QCOMPARE(finished.at(0).at(1).toString(), QString());
     }
 
+    void pipelineIgnoresTrimmedFiles() {
+        QTemporaryDir dir;
+        QFile original(dir.filePath("meeting.wav"));
+        QVERIFY(original.open(QIODevice::WriteOnly));
+        original.close();
+        QFile trimmed(dir.filePath("meeting.trimmed.wav"));
+        QVERIFY(trimmed.open(QIODevice::WriteOnly));
+        trimmed.close();
+        int trimCount = 0, transcribeCount = 0;
+        ProcessingPipeline pipeline(configFor(dir.path()), nullptr,
+            [&trimCount](const QString &, const QString &, QString *) { ++trimCount; return true; },
+            [&transcribeCount](const QString &) { ++transcribeCount; return QString("t"); },
+            [](const QString &) { return QString("s"); });
+        QSignalSpy finished(&pipeline, &ProcessingPipeline::finished);
+        pipeline.run();
+        QCOMPARE(trimCount, 1);
+        QCOMPARE(transcribeCount, 1);
+        QVERIFY(!QFile::exists(dir.filePath("meeting.trimmed.trimmed.wav")));
+        QCOMPARE(finished.count(), 1);
+    }
+
+    void pipelineUsesConfiguredMinSilence() {
+        QTemporaryDir dir;
+        QString error;
+        const QString path = dir.filePath("meeting.wav");
+        QVERIFY(Wav::writePcm16Mono(path, pcm({{1, 4000}, {6, 0}, {1, 4000}}), 16000, &error));
+        AppConfig config = configFor(dir.path());
+        config.silenceMinSeconds = 10.0; // longer than the 6s pause, so nothing is trimmed
+        ProcessingPipeline pipeline(config, nullptr, {},
+            [](const QString &) { return QString("transcript"); },
+            [](const QString &) { return QString("summary"); });
+        QSignalSpy finished(&pipeline, &ProcessingPipeline::finished);
+        pipeline.run();
+        QCOMPARE(finished.count(), 1);
+        QVERIFY(finished.at(0).at(0).toBool());
+        QFile original(path);
+        QVERIFY(original.open(QIODevice::ReadOnly));
+        const QByteArray originalBytes = original.readAll();
+        original.close();
+        QFile trimmed(dir.filePath("meeting.trimmed.wav"));
+        QVERIFY(trimmed.open(QIODevice::ReadOnly));
+        QCOMPARE(trimmed.readAll(), originalBytes);
+    }
+
+    void pipelineUsesConfiguredThreshold() {
+        QTemporaryDir dir;
+        QString error;
+        const QString path = dir.filePath("meeting.wav");
+        QVERIFY(Wav::writePcm16Mono(path, pcm({{1, 4000}, {6, 0}, {1, 4000}}), 16000, &error));
+        AppConfig config = configFor(dir.path());
+        config.silenceThresholdDb = 0.0; // everything below full scale counts as silence
+        ProcessingPipeline pipeline(config, nullptr, {},
+            [](const QString &) { return QString("transcript"); },
+            [](const QString &) { return QString("summary"); });
+        QSignalSpy finished(&pipeline, &ProcessingPipeline::finished);
+        pipeline.run();
+        QCOMPARE(finished.count(), 1);
+        QVERIFY(finished.at(0).at(0).toBool());
+        QFile original(path);
+        QVERIFY(original.open(QIODevice::ReadOnly));
+        const QByteArray originalBytes = original.readAll();
+        original.close();
+        QFile trimmed(dir.filePath("meeting.trimmed.wav"));
+        QVERIFY(trimmed.open(QIODevice::ReadOnly));
+        QCOMPARE(trimmed.readAll(), originalBytes);
+    }
+
     void pipelineCleanRetainsMarkdown() {
         QTemporaryDir dir;
-        for (const QString &name : {"call.wav", "call.tns", "summary.md"}) {
+        for (const QString &name : {"call.wav", "call.trimmed.wav", "call.tns", "summary.md"}) {
             QFile file(dir.filePath(name));
             QVERIFY(file.open(QIODevice::WriteOnly));
             file.write("test");
@@ -160,6 +257,7 @@ private slots:
         ProcessingPipeline pipeline(configFor(dir.path()));
         pipeline.clean();
         QVERIFY(!QFile::exists(dir.filePath("call.wav")));
+        QVERIFY(!QFile::exists(dir.filePath("call.trimmed.wav")));
         QVERIFY(!QFile::exists(dir.filePath("call.tns")));
         QVERIFY(QFile::exists(dir.filePath("summary.md")));
     }
@@ -170,12 +268,16 @@ private slots:
         setConfigPathForTesting(path);
         AppConfig config = configFor(dir.filePath("output"));
         config.llmModel = "test-model";
+        config.silenceThresholdDb = -35.5;
+        config.silenceMinSeconds = 7.5;
         config.steps = {{"Only", "Do: {chunk}"}};
         QString error;
         QVERIFY2(saveConfig(config, &error), qPrintable(error));
         const AppConfig loaded = loadConfig();
         QCOMPARE(loaded.outputDir, config.outputDir);
         QCOMPARE(loaded.llmModel, "test-model");
+        QCOMPARE(loaded.silenceThresholdDb, config.silenceThresholdDb);
+        QCOMPARE(loaded.silenceMinSeconds, config.silenceMinSeconds);
         QCOMPARE(loaded.steps.size(), 1);
         QCOMPARE(loaded.steps.first().name, "Only");
     }

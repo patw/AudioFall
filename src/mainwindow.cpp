@@ -26,8 +26,10 @@
 #include <QTextEdit>
 #include <QTabWidget>
 #include <QThread>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <cmath>
 
 MainWindow::MainWindow() : config_(loadConfig()), recorder_(new Recorder(this)) {
     // Match AudioSumma's compact, native Qt layout rather than adding a custom header.
@@ -59,7 +61,10 @@ MainWindow::MainWindow() : config_(loadConfig()), recorder_(new Recorder(this)) 
     status_->setToolTip("Not recording");
     row->addWidget(status_);
     devices_ = new QComboBox;
-    refreshDevices();
+    // Defer the first device scan until the event loop is running so that Qt
+    // Multimedia's FFmpeg/PipeWire backend has time to initialise its async
+    // connection, avoiding a segfault on the very first launch.
+    QTimer::singleShot(0, this, &MainWindow::refreshDevices);
     row->addWidget(devices_);
     layout->addLayout(row);
 
@@ -250,7 +255,11 @@ void MainWindow::showSettings() {
     auto *generalForm = new QFormLayout(generalTab);
     generalForm->setSpacing(8);
     auto *out = makeEditor(config_.outputDir);
+    auto *silenceThreshold = new QLineEdit(QString::number(config_.silenceThresholdDb));
+    auto *silenceMin = new QLineEdit(QString::number(config_.silenceMinSeconds));
     generalForm->addRow("Output Directory:", out);
+    generalForm->addRow("Silence threshold (dB):", silenceThreshold);
+    generalForm->addRow("Minimum silence (seconds):", silenceMin);
     tabs->addTab(generalTab, "General Settings");
     layout->addWidget(tabs);
 
@@ -270,6 +279,18 @@ void MainWindow::showSettings() {
     config_.llmApiKey = key->toPlainText();
     config_.llmModel = model->toPlainText();
     config_.systemMessage = system->toPlainText();
+
+    bool thresholdOk = false, minSilenceOk = false;
+    const double thresholdValue = silenceThreshold->text().trimmed().toDouble(&thresholdOk);
+    const double minSilenceValue = silenceMin->text().trimmed().toDouble(&minSilenceOk);
+    if (!thresholdOk || !minSilenceOk || !std::isfinite(thresholdValue) ||
+        !std::isfinite(minSilenceValue) || minSilenceValue < 0) {
+        QMessageBox::warning(this, "Settings",
+                             "Silence threshold must be a number (dB) and minimum silence a non-negative number of seconds.");
+        return;
+    }
+    config_.silenceThresholdDb = thresholdValue;
+    config_.silenceMinSeconds = minSilenceValue;
 
     QVector<SummaryStep> parsedSteps;
     for (qsizetype i = 0; i < stepNames.size(); ++i) {

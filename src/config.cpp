@@ -43,6 +43,8 @@ AppConfig loadConfig() {
     c.llmApiKey = o.value("llm_api_key").toString(c.llmApiKey);
     c.llmModel = o.value("llm_model").toString(c.llmModel);
     c.systemMessage = o.value("system_message").toString(c.systemMessage);
+    c.silenceThresholdDb = o.value("silence_threshold_db").toDouble(c.silenceThresholdDb);
+    c.silenceMinSeconds = o.value("silence_min_seconds").toDouble(c.silenceMinSeconds);
 
     if (o.contains("steps") && o.value("steps").isArray()) {
         QVector<SummaryStep> loaded;
@@ -62,6 +64,7 @@ bool saveConfig(const AppConfig &c, QString *error) {
     for (const auto &s : c.steps) steps.append(QJsonObject{{"name", s.name}, {"prompt", s.prompt}});
     QJsonObject o{{"output_dir", c.outputDir}, {"whisper_url", c.whisperUrl}, {"llm_url", c.llmUrl},
                   {"llm_api_key", c.llmApiKey}, {"llm_model", c.llmModel}, {"system_message", c.systemMessage},
+                  {"silence_threshold_db", c.silenceThresholdDb}, {"silence_min_seconds", c.silenceMinSeconds},
                   {"steps", steps}};
     const QString path = configPath();
     if (!QDir().mkpath(QFileInfo(path).dir().path())) {

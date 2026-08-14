@@ -6,7 +6,7 @@
 class ProcessingPipeline : public QObject {
     Q_OBJECT
 public:
-    using TrimFn = std::function<bool(const QString &, QString *)>;
+    using TrimFn = std::function<bool(const QString &, const QString &, QString *)>;
     using TranscribeFn = std::function<QString(const QString &)>;
     using SummarizeFn = std::function<QString(const QString &)>;
 
