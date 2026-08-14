@@ -5,6 +5,7 @@
 #include <QtTest>
 #include <QFile>
 #include <QSignalSpy>
+#include <QThread>
 #include <QTemporaryDir>
 #include <QtEndian>
 #include <limits>
@@ -178,6 +179,17 @@ private slots:
         QCOMPARE(finished.count(), 1);
         QVERIFY(finished.at(0).at(0).toBool());
         QCOMPARE(finished.at(0).at(1).toString(), QString());
+    }
+
+    void processingThreadIsStoppedBeforeDeletion() {
+        auto *thread = new QThread;
+        QSignalSpy deleted(thread, &QObject::destroyed);
+        connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+        thread->start();
+        QVERIFY(thread->isRunning());
+        thread->quit();
+        QVERIFY(thread->wait(5000));
+        QTRY_COMPARE(deleted.count(), 1);
     }
 
     void pipelineIgnoresTrimmedFiles() {

@@ -178,22 +178,28 @@ void MainWindow::toggleRecording() {
 }
 
 void MainWindow::process() {
+    if (processingThread_) return;
     setBusy(true);
 
-    processingThread_ = new QThread(this);
+    auto *thread = new QThread(this);
     auto *pipeline = new ProcessingPipeline(config_);
-    pipeline->moveToThread(processingThread_);
-    connect(processingThread_, &QThread::started, pipeline, &ProcessingPipeline::run);
+    processingThread_ = thread;
+    pipeline->moveToThread(thread);
+    connect(thread, &QThread::started, pipeline, &ProcessingPipeline::run);
     connect(pipeline, &ProcessingPipeline::activity, this, &MainWindow::log);
-    connect(pipeline, &ProcessingPipeline::finished, this, [this, pipeline](bool success, const QString &message) {
+    connect(pipeline, &ProcessingPipeline::finished, this, [this, thread](bool success, const QString &message) {
         if (!success) log("Processing failed: " + message);
         setBusy(false);
-        processingThread_->quit();
-        pipeline->deleteLater();
-        processingThread_->deleteLater();
-        processingThread_ = nullptr;
+        thread->quit();
     });
-    processingThread_->start();
+    // quit() is asynchronous.  Deleting a still-running QThread aborts the
+    // process, so defer both cleanup and clearing the guard until it finishes.
+    connect(thread, &QThread::finished, pipeline, &QObject::deleteLater);
+    connect(thread, &QThread::finished, this, [this, thread] {
+        if (processingThread_ == thread) processingThread_ = nullptr;
+        thread->deleteLater();
+    });
+    thread->start();
 }
 
 void MainWindow::clean() {
