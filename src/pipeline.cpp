@@ -49,7 +49,10 @@ QString ProcessingPipeline::transcribe(const QString &wavPath) {
 
     QNetworkAccessManager manager;
     QNetworkRequest request(QUrl(config_.whisperUrl));
-    request.setTransferTimeout(300000);
+    // Long recordings can take substantially longer than their duration to
+    // transcribe. Keep the request open while the Whisper server processes the
+    // complete trimmed WAV rather than failing after five minutes.
+    request.setTransferTimeout(1800000);
     auto *multi = new QHttpMultiPart(QHttpMultiPart::FormDataType);
     QHttpPart temperature;
     temperature.setHeader(QNetworkRequest::ContentDispositionHeader, "form-data; name=\"temperature\"");
