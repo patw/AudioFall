@@ -25,6 +25,10 @@ set_target_properties(audiofall PROPERTIES MACOSX_BUNDLE TRUE)
 find_package(Qt6 COMPONENTS Test QUIET)
 if (Qt6Test_FOUND)
     enable_testing()
+    add_executable(audiofall_appicon_test tests/test_appicon.cpp resources.qrc)
+    target_include_directories(audiofall_appicon_test PRIVATE src)
+    target_link_libraries(audiofall_appicon_test PRIVATE Qt6::Core Qt6::Widgets)
+    add_test(NAME AudioFallAppIconTest COMMAND audiofall_appicon_test)
     add_executable(audiofall_tests
         tests/tests.cpp
         src/mainwindow.cpp
