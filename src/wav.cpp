@@ -15,6 +15,30 @@ bool parse(const QString &path, Parsed &p, QString *err) {
  if(!fmt||!data){if(err)*err="WAV needs fmt and data chunks";return false;} return true;
 }
 }
+bool Wav::readFloat16kMono(const QString &path, QVector<float> &samples, QString *err) {
+ Parsed p;
+ samples.clear();
+ if (!parse(path, p, err)) return false;
+ if (p.rate != 16000 || p.channels != 1 || p.bits != 16 || p.data.size() % 2) {
+   if (err) *err = "Transcription requires 16 kHz mono PCM16 WAV";
+   return false;
+ }
+ samples.resize(p.data.size() / 2);
+ for (qsizetype i = 0; i < samples.size(); ++i)
+   samples[i] = qFromLittleEndian<qint16>(reinterpret_cast<const uchar *>(p.data.constData()) + i * 2) / 32768.0f;
+ return true;
+}
+
+double Wav::durationSeconds(const QString &path, QString *err) {
+ Parsed p;
+ if (!parse(path, p, err)) return -1.0;
+ const int bytesPerFrame = p.channels * (p.bits / 8);
+ if (p.rate <= 0 || bytesPerFrame <= 0) {
+   if (err) *err = "Invalid WAV format";
+   return -1.0;
+ }
+ return double(p.data.size()) / double(p.rate * bytesPerFrame);
+}
 bool Wav::writePcm16Mono(const QString &path,const QByteArray &pcm,int rate,QString *err) {
  if(rate<=0||pcm.size()%2){if(err)*err="Invalid PCM payload";return false;} QByteArray h("RIFF",4); put32(h,36+pcm.size()); h.append("WAVEfmt ",8);put32(h,16);put16(h,1);put16(h,1);put32(h,rate);put32(h,rate*2);put16(h,2);put16(h,16);h.append("data",4);put32(h,pcm.size());
  QSaveFile f(path);if(!f.open(QIODevice::WriteOnly)){if(err)*err=f.errorString();return false;}f.write(h);f.write(pcm);if(!f.commit()){if(err)*err=f.errorString();return false;}return true;

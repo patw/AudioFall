@@ -7,8 +7,11 @@
 #include <QSignalSpy>
 #include <QThread>
 #include <QTemporaryDir>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QtEndian>
 #include <limits>
+#include <stdexcept>
 
 class AudioFallTests : public QObject {
     Q_OBJECT
@@ -292,6 +295,80 @@ private slots:
         QCOMPARE(loaded.silenceMinSeconds, config.silenceMinSeconds);
         QCOMPARE(loaded.steps.size(), 1);
         QCOMPARE(loaded.steps.first().name, "Only");
+    }
+
+    void floatPcmConversionAndFormatValidation() {
+        QTemporaryDir dir;
+        QString error;
+        const QString path = dir.filePath("samples.wav");
+        QByteArray bytes;
+        for (qint16 sample : {qint16(-32768), qint16(0), qint16(32767)}) {
+            char b[2];
+            qToLittleEndian(sample, reinterpret_cast<uchar *>(b));
+            bytes.append(b, 2);
+        }
+        QVERIFY(Wav::writePcm16Mono(path, bytes, 16000, &error));
+        QVector<float> floats;
+        QVERIFY(Wav::readFloat16kMono(path, floats, &error));
+        QCOMPARE(floats.size(), 3);
+        QCOMPARE(floats[0], -1.0f);
+        QCOMPARE(floats[1], 0.0f);
+        QCOMPARE(floats[2], 32767.0f / 32768.0f);
+        QVERIFY(Wav::writePcm16Mono(path, bytes, 48000, &error));
+        QVERIFY(!Wav::readFloat16kMono(path, floats, &error));
+        QVERIFY(!error.isEmpty());
+    }
+
+    void localSilenceDoesNotHallucinateOrLoadModel() {
+        QTemporaryDir dir;
+        const QString path = dir.filePath("silence.wav");
+        QVERIFY(Wav::writePcm16Mono(path, pcm({{1, 0}}), 16000));
+        LocalTranscriber transcriber;
+        QCOMPARE(transcriber.transcribe(path, "auto"), QStringLiteral(""));
+    }
+
+    void legacyWhisperEndpointIsIgnored() {
+        QTemporaryDir dir;
+        setConfigPathForTesting(dir.filePath("settings.json"));
+        QFile file(dir.filePath("settings.json"));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(QJsonDocument(QJsonObject{{"whisper_url", "http://obsolete:8088/inference"},
+                                            {"llm_model", "retained"}}).toJson());
+        file.close();
+        auto config = loadConfig();
+        QCOMPARE(config.transcriptionLanguage, "auto");
+        QCOMPARE(config.llmModel, "retained");
+        config.transcriptionLanguage = "de";
+        QVERIFY(saveConfig(config));
+        QCOMPARE(loadConfig().transcriptionLanguage, "de");
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const auto object = QJsonDocument::fromJson(file.readAll()).object();
+        QVERIFY(!object.contains("whisper_url"));
+    }
+
+    void bundledModelResolutionDoesNotUseWorkingDirectory() {
+        QTemporaryDir dir;
+#ifdef Q_OS_MACOS
+        const QString executableDir = dir.filePath("AudioFall.app/Contents/MacOS");
+        QCOMPARE(LocalTranscriber::bundledModelPath(executableDir),
+                 dir.filePath("AudioFall.app/Contents/Resources/models/ggml-large-v3-turbo-q5_0.bin"));
+#else
+        const QString executableDir = dir.filePath("usr/bin");
+        QCOMPARE(LocalTranscriber::bundledModelPath(executableDir),
+                 dir.filePath("usr/share/audiofall/models/ggml-large-v3-turbo-q5_0.bin"));
+        QVERIFY(QDir().mkpath(executableDir + "/models"));
+        QFile model(executableDir + "/models/ggml-large-v3-turbo-q5_0.bin");
+        QVERIFY(model.open(QIODevice::WriteOnly));
+        model.close();
+        QCOMPARE(LocalTranscriber::bundledModelPath(executableDir), model.fileName());
+#endif
+    }
+
+    void localTranscriberRejectsInvalidAudioWithoutNetwork() {
+        QTemporaryDir dir;
+        LocalTranscriber transcriber;
+        QVERIFY_THROWS_EXCEPTION(std::runtime_error, transcriber.transcribe(dir.filePath("missing.wav"), "auto"));
+        QVERIFY_THROWS_EXCEPTION(std::runtime_error, transcriber.transcribe(dir.filePath("missing.wav"), "invalid-language"));
     }
 
     void safeRecordingFileNames() {

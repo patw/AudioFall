@@ -21,18 +21,30 @@ if "%QT_ROOT_DIR%"=="" (
 set PATH=%QT_ROOT_DIR%\bin;%PATH%
 echo Using Qt: %QT_ROOT_DIR%
 cmake -S . -B build_windows -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="%QT_ROOT_DIR%"
+if errorlevel 1 exit /b 1
 cmake --build build_windows
+if errorlevel 1 exit /b 1
 set QT_QPA_PLATFORM=offscreen
 ctest --test-dir build_windows --output-on-failure
+if errorlevel 1 exit /b 1
 
 set DIST=AudioFall-Windows
 if exist "%DIST%" rmdir /s /q "%DIST%"
 mkdir "%DIST%"
 copy "build_windows\audiofall.exe" "%DIST%\AudioFall.exe" >nul
 copy "assets\audiofall.png" "%DIST%\audiofall.png" >nul
+xcopy "build_windows\models" "%DIST%\models\" /E /I /Y >nul
+if errorlevel 1 exit /b 1
+xcopy "build_windows\licenses" "%DIST%\licenses\" /E /I /Y >nul
+if errorlevel 1 exit /b 1
 pushd "%DIST%"
 windeployqt --release --compiler-runtime AudioFall.exe
+if errorlevel 1 exit /b 1
 popd
+"%DIST%\AudioFall.exe" --transcribe-file "build_windows\_deps\whisper-src\samples\jfk.wav" > "build_windows\smoke-transcript.txt"
+if errorlevel 1 exit /b 1
+findstr /I /C:"ask not what your country" "build_windows\smoke-transcript.txt" >nul
+if errorlevel 1 exit /b 1
 
 echo.
 echo Packaged: %DIST%

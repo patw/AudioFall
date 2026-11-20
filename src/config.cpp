@@ -38,7 +38,8 @@ AppConfig loadConfig() {
     if (!f.open(QIODevice::ReadOnly)) return c;
     const auto o = QJsonDocument::fromJson(f.readAll()).object();
     c.outputDir = o.value("output_dir").toString(c.outputDir);
-    c.whisperUrl = o.value("whisper_url").toString(c.whisperUrl);
+    // Legacy whisper_url is deliberately ignored: transcription is always local.
+    c.transcriptionLanguage = o.value("transcription_language").toString("auto");
     c.llmUrl = o.value("llm_url").toString(c.llmUrl);
     c.llmApiKey = o.value("llm_api_key").toString(c.llmApiKey);
     c.llmModel = o.value("llm_model").toString(c.llmModel);
@@ -62,7 +63,7 @@ AppConfig loadConfig() {
 bool saveConfig(const AppConfig &c, QString *error) {
     QJsonArray steps;
     for (const auto &s : c.steps) steps.append(QJsonObject{{"name", s.name}, {"prompt", s.prompt}});
-    QJsonObject o{{"output_dir", c.outputDir}, {"whisper_url", c.whisperUrl}, {"llm_url", c.llmUrl},
+    QJsonObject o{{"output_dir", c.outputDir}, {"transcription_language", c.transcriptionLanguage}, {"llm_url", c.llmUrl},
                   {"llm_api_key", c.llmApiKey}, {"llm_model", c.llmModel}, {"system_message", c.systemMessage},
                   {"silence_threshold_db", c.silenceThresholdDb}, {"silence_min_seconds", c.silenceMinSeconds},
                   {"steps", steps}};

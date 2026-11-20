@@ -18,6 +18,12 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - name: Cache bundled Whisper model
+        uses: actions/cache@v4
+        with:
+          path: models/ggml-large-v3-turbo-q5_0.bin
+          key: whisper-turbo-q5-394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2
+          enableCrossOsArchive: true
       - name: Install build and package dependencies
         run: |
           sudo apt-get update
@@ -48,6 +54,12 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Cache bundled Whisper model
+        uses: actions/cache@v4
+        with:
+          path: models/ggml-large-v3-turbo-q5_0.bin
+          key: whisper-turbo-q5-394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2
+          enableCrossOsArchive: true
       - name: Install Qt and CMake
         run: |
           export HOMEBREW_NO_REQUIRE_TAP_TRUST=1
@@ -66,6 +78,12 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Cache bundled Whisper model
+        uses: actions/cache@v4
+        with:
+          path: models/ggml-large-v3-turbo-q5_0.bin
+          key: whisper-turbo-q5-394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2
+          enableCrossOsArchive: true
       - name: Install Qt 6 with Multimedia
         uses: jurplel/install-qt-action@v4
         with:

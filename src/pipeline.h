@@ -1,5 +1,6 @@
 #pragma once
 #include "config.h"
+#include "transcriber.h"
 #include <QObject>
 #include <functional>
 
@@ -17,6 +18,7 @@ public:
 
 signals:
     void activity(const QString &message);
+    void activityUpdated(const QString &message);
     void finished(bool success, const QString &message);
 
 private:
@@ -24,6 +26,8 @@ private:
     TrimFn trimOverride_;
     TranscribeFn transcribeOverride_;
     SummarizeFn summarizeOverride_;
+    int lastCompletionTokens_ = 0;
+    LocalTranscriber localTranscriber_;
     QString transcribe(const QString &wavPath);
     QString summarize(const QString &prompt);
     QByteArray post(const QUrl &url, const QByteArray &body,

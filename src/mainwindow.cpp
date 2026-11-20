@@ -24,6 +24,7 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QTextEdit>
+#include <QTextCursor>
 #include <QTabWidget>
 #include <QThread>
 #include <QTimer>
@@ -187,6 +188,14 @@ void MainWindow::process() {
     pipeline->moveToThread(thread);
     connect(thread, &QThread::started, pipeline, &ProcessingPipeline::run);
     connect(pipeline, &ProcessingPipeline::activity, this, &MainWindow::log);
+    connect(pipeline, &ProcessingPipeline::activityUpdated, this, [this](const QString &message) {
+        QTextCursor cursor = activity_->textCursor();
+        cursor.movePosition(QTextCursor::End);
+        cursor.movePosition(QTextCursor::StartOfBlock, QTextCursor::KeepAnchor);
+        cursor.removeSelectedText();
+        cursor.insertText(message);
+        activity_->setTextCursor(cursor);
+    });
     connect(pipeline, &ProcessingPipeline::finished, this, [this, thread](bool success, const QString &message) {
         if (!success) log("Processing failed: " + message);
         setBusy(false);
@@ -236,8 +245,19 @@ void MainWindow::showSettings() {
     auto *whisperTab = new QWidget;
     auto *whisperForm = new QFormLayout(whisperTab);
     whisperForm->setSpacing(8);
-    auto *whisper = makeEditor(config_.whisperUrl);
-    whisperForm->addRow("URL:", whisper);
+    auto *language = new QComboBox;
+    language->addItem("Auto-detect", "auto");
+    language->addItem("English", "en");
+    language->addItem("German", "de");
+    language->addItem("French", "fr");
+    int languageIndex = language->findData(config_.transcriptionLanguage);
+    if (languageIndex < 0) {
+        language->addItem(config_.transcriptionLanguage, config_.transcriptionLanguage);
+        languageIndex = language->count() - 1;
+    }
+    language->setCurrentIndex(languageIndex);
+    whisperForm->addRow("Model:", new QLabel("Whisper large-v3-turbo Q5 (bundled, offline)"));
+    whisperForm->addRow("Language:", language);
     tabs->addTab(whisperTab, "Whisper");
 
     auto *promptsTab = new QWidget;
@@ -280,7 +300,7 @@ void MainWindow::showSettings() {
     if (dialog.exec() != QDialog::Accepted) return;
 
     config_.outputDir = out->toPlainText();
-    config_.whisperUrl = whisper->toPlainText();
+    config_.transcriptionLanguage = language->currentData().toString();
     config_.llmUrl = llm->toPlainText();
     config_.llmApiKey = key->toPlainText();
     config_.llmModel = model->toPlainText();

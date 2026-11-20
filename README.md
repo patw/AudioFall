@@ -1,16 +1,27 @@
 # AudioFall
 
-AudioFall is a native Qt6 desktop application that records microphone audio, trims extended quiet sections, transcribes through a Whisper-compatible service, and writes Markdown summaries through an OpenAI-compatible LLM service.
+AudioFall is a native Qt6 desktop application that records microphone audio, trims extended quiet sections, transcribes offline with bundled whisper.cpp and Whisper large-v3-turbo Q5, and writes Markdown summaries through an OpenAI-compatible LLM service.
 
 It is a clean C++ implementation: no Python, virtual environment, pip packages, or AudioSumma configuration migration is required.
 
 ## Runtime requirements
 
 - A microphone allowed by the operating system.
-- A Whisper-compatible endpoint; default: `http://localhost:8081/inference`.
 - An OpenAI-compatible chat-completions endpoint; default: `http://localhost:8080/v1`.
 
-See [Running a local whisper.cpp server](docs/local-whisper.md) for the reference model, macOS `launchd` setup, and Linux/Windows service instructions. See [LLM providers and local summarization](docs/llm-providers.md) for hosted OpenAI-compatible providers, Anthropic compatibility notes, and local Ollama/llama.cpp options.
+Transcription is fully local: release packages include the native inference engine and
+`ggml-large-v3-turbo-q5_0.bin` (~547 MiB). No transcription server, Python, model
+setup, or first-run download is required. Audio is not uploaded for transcription.
+Settings → Whisper selects auto-detection or a known language (English/German/French).
+Transcripts stay in the spoken language; Whisper does not translate them to English.
+Legacy `whisper_url` settings are ignored and removed when settings are next saved.
+
+**Summarization is separate:** transcripts are sent to the configured LLM endpoint.
+Keep that endpoint local if the entire workflow must stay on-device. See
+[LLM providers and local summarization](docs/llm-providers.md).
+
+See [Embedded transcription and packaging](docs/local-whisper.md) for build-time
+model caching, licenses, and hardware support.
 
 The app requests **16 kHz mono signed-16-bit PCM** from the selected microphone. The current native implementation explicitly rejects devices that cannot provide that format rather than silently recording an incompatible WAV.
 
@@ -28,6 +39,14 @@ Tagged GitHub releases produce these native artifacts:
 | Debian/Ubuntu | `audiofall_X.Y.Z_amd64.deb` | Uses the distro Qt6 packages declared as dependencies. |
 
 ## Build from source
+
+CMake downloads a pinned whisper.cpp source archive and the model on the first
+configure, verifies their SHA-256 hashes, and copies the model into the application.
+Allow roughly 547 MiB for the model plus build/package copies. Model weights are
+cached under `models/` (gitignored); subsequent builds reuse them. A verified existing
+copy may be supplied with `-DAUDIOFALL_MODEL_FILE=/absolute/path/to/ggml-large-v3-turbo-q5_0.bin`.
+This is a **build-time** input, not an end-user model setting. Releases always bundle
+that same model. Source and model downloads need internet at build time only.
 
 ### macOS
 

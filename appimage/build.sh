@@ -23,6 +23,8 @@ cmake --build "$BUILD" --parallel "$(nproc)"
 QT_QPA_PLATFORM=offscreen ctest --test-dir "$BUILD" --output-on-failure
 
 install -m 755 "$BUILD/audiofall" "$APPDIR/usr/bin/audiofall"
+mkdir -p "$APPDIR/usr/share/audiofall"
+cp -R "$BUILD/models" "$BUILD/licenses" "$APPDIR/usr/share/audiofall/"
 install -m 644 "$ROOT/audiofall.desktop" "$APPDIR/usr/share/applications/audiofall.desktop"
 install -m 644 "$PROJECT_ROOT/assets/audiofall.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/audiofall.png"
 cp "$PROJECT_ROOT/assets/audiofall.png" "$APPDIR/audiofall.png"
@@ -35,4 +37,6 @@ export LDAI_OUTPUT="$PROJECT_ROOT/AudioFall-x86_64.AppImage"
     --icon-file "$APPDIR/usr/share/icons/hicolor/256x256/apps/audiofall.png" \
     --output appimage
 
+"$PROJECT_ROOT/AudioFall-x86_64.AppImage" --appimage-extract-and-run --transcribe-file "$BUILD/_deps/whisper-src/samples/jfk.wav" > "$BUILD/smoke-transcript.txt"
+grep -qi "ask not what your country" "$BUILD/smoke-transcript.txt"
 echo "Built: $PROJECT_ROOT/AudioFall-x86_64.AppImage"

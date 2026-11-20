@@ -5,7 +5,7 @@
 struct SummaryStep { QString name; QString prompt; };
 struct AppConfig {
     QString outputDir;
-    QString whisperUrl = "http://localhost:8081/inference";
+    QString transcriptionLanguage = "auto";
     QString llmUrl = "http://localhost:8080/v1";
     QString llmApiKey = "doesntmatter";
     QString llmModel = "whatever";

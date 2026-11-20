@@ -23,10 +23,14 @@ mkdir -p "$STAGING/DEBIAN" \
          "$STAGING/usr/share/doc/audiofall"
 
 install -m 755 "$BUILD/audiofall" "$STAGING/usr/bin/audiofall"
+mkdir -p "$STAGING/usr/share/audiofall"
+cp -R "$BUILD/models" "$BUILD/licenses" "$STAGING/usr/share/audiofall/"
 install -m 644 "$ROOT/assets/audiofall.png" "$STAGING/usr/share/icons/hicolor/256x256/apps/audiofall.png"
 install -m 644 "$ROOT/appimage/audiofall.desktop" "$STAGING/usr/share/applications/audiofall.desktop"
 install -m 644 "$ROOT/LICENSE" "$STAGING/usr/share/doc/audiofall/copyright"
 
+"$STAGING/usr/bin/audiofall" --transcribe-file "$BUILD/_deps/whisper-src/samples/jfk.wav" > "$BUILD/smoke-transcript.txt"
+grep -qi "ask not what your country" "$BUILD/smoke-transcript.txt"
 INSTALLED_KB="$(du -sk "$STAGING/usr" | cut -f1)"
 cat > "$STAGING/DEBIAN/control" <<EOF
 Package: audiofall
@@ -39,8 +43,8 @@ Section: sound
 Priority: optional
 Homepage: https://github.com/patw/AudioFall
 Description: Local microphone transcription and meeting summarization
- AudioFall records microphone audio, trims long quiet stretches, sends it to
- a Whisper-compatible service, and writes Markdown summaries using an
+ AudioFall records microphone audio, trims long quiet stretches, transcribes
+ locally with bundled Whisper Turbo Q5, and writes Markdown summaries using an
  OpenAI-compatible language model service.
 EOF
 

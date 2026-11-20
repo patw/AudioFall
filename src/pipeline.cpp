@@ -1,11 +1,11 @@
 #include "pipeline.h"
 #include "wav.h"
 #include <QDate>
+#include <QElapsedTimer>
 #include <QDir>
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
-#include <QHttpMultiPart>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -44,45 +44,15 @@ QByteArray ProcessingPipeline::post(const QUrl &url, const QByteArray &body,
 
 QString ProcessingPipeline::transcribe(const QString &wavPath) {
     if (transcribeOverride_) return transcribeOverride_(wavPath);
-    QFile *file = new QFile(wavPath);
-    if (!file->open(QIODevice::ReadOnly)) throw std::runtime_error(file->errorString().toStdString());
-
-    QNetworkAccessManager manager;
-    QNetworkRequest request(QUrl(config_.whisperUrl));
-    // Long recordings can take substantially longer than their duration to
-    // transcribe. Keep the request open while the Whisper server processes the
-    // complete trimmed WAV rather than failing after five minutes.
-    request.setTransferTimeout(1800000);
-    auto *multi = new QHttpMultiPart(QHttpMultiPart::FormDataType);
-    QHttpPart temperature;
-    temperature.setHeader(QNetworkRequest::ContentDispositionHeader, "form-data; name=\"temperature\"");
-    temperature.setBody("0.0");
-    multi->append(temperature);
-    QHttpPart format;
-    format.setHeader(QNetworkRequest::ContentDispositionHeader, "form-data; name=\"response_format\"");
-    format.setBody("json");
-    multi->append(format);
-    QHttpPart audio;
-    audio.setHeader(QNetworkRequest::ContentTypeHeader, "audio/wav");
-    audio.setHeader(QNetworkRequest::ContentDispositionHeader, QString("form-data; name=\"file\"; filename=\"%1\"").arg(QFileInfo(wavPath).fileName()));
-    audio.setBodyDevice(file);
-    file->setParent(multi);
-    multi->append(audio);
-    QNetworkReply *reply = manager.post(request, multi);
-    multi->setParent(reply);
-    QEventLoop loop;
-    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    loop.exec();
-    const QByteArray result = reply->readAll();
-    const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-    const QString failure = reply->errorString();
-    reply->deleteLater();
-    if (status < 200 || status >= 300)
-        throw std::runtime_error(QString("Whisper HTTP %1: %2").arg(status).arg(QString::fromUtf8(result.isEmpty() ? failure.toUtf8() : result)).toStdString());
-
-    const QString text = QJsonDocument::fromJson(result).object().value("text").toString();
-    if (text.isNull()) throw std::runtime_error("Whisper response did not include text");
-    return text;
+    int lastProgress = -1;
+    return localTranscriber_.transcribe(wavPath, config_.transcriptionLanguage,
+        [this, &lastProgress, &wavPath](int progress) {
+            const int rounded = progress / 5 * 5;
+            if (rounded == lastProgress) return;
+            lastProgress = rounded;
+            emit activityUpdated(QString("Transcribing: %1 (%2%)")
+                                 .arg(QFileInfo(wavPath).fileName()).arg(rounded));
+        });
 }
 
 QString ProcessingPipeline::summarize(const QString &prompt) {
@@ -95,7 +65,9 @@ QString ProcessingPipeline::summarize(const QString &prompt) {
                                   QJsonDocument(QJsonObject{{"model", config_.llmModel}, {"messages", messages}}).toJson(QJsonDocument::Compact),
                                   {{"Authorization", ("Bearer " + config_.llmApiKey).toUtf8()}, {"api-key", config_.llmApiKey.toUtf8()}},
                                   "application/json");
-    const QJsonArray choices = QJsonDocument::fromJson(reply).object().value("choices").toArray();
+    const QJsonObject response = QJsonDocument::fromJson(reply).object();
+    const QJsonArray choices = response.value("choices").toArray();
+    lastCompletionTokens_ = response.value("usage").toObject().value("completion_tokens").toInt();
     const QString content = choices.isEmpty() ? QString() : choices.at(0).toObject().value("message").toObject().value("content").toString();
     if (content.isNull()) throw std::runtime_error("LLM response did not include choices[0].message.content");
     return content;
@@ -128,7 +100,15 @@ void ProcessingPipeline::run() {
             const bool trimmed = trimOverride_ ? trimOverride_(wav, trimmedWav, &error) : Wav::removeSilence(wav, trimmedWav, config_.silenceThresholdDb, config_.silenceMinSeconds, .5, &error);
             if (!trimmed) throw std::runtime_error(error.toStdString());
             emit activity("Transcribing: " + name);
+            QElapsedTimer transcriptionTimer;
+            transcriptionTimer.start();
             const QString text = transcribe(trimmedWav);
+            const double audioSeconds = Wav::durationSeconds(trimmedWav);
+            const double elapsedSeconds = transcriptionTimer.elapsed() / 1000.0;
+            if (audioSeconds > 0.0 && elapsedSeconds > 0.0) {
+                emit activityUpdated(QString("Transcribing: %1 (%2x real-time)")
+                                     .arg(name).arg(audioSeconds / elapsedSeconds, 0, 'f', 1));
+            }
             QSaveFile output(transcriptPath);
             if (!output.open(QIODevice::WriteOnly)) throw std::runtime_error(output.errorString().toStdString());
             output.write(text.toUtf8());
@@ -153,7 +133,17 @@ void ProcessingPipeline::run() {
             emit activity("Summarizing: " + name);
             for (const auto &step : config_.steps) {
                 emit activity("  Running step: " + step.name);
-                section += "## " + step.name + "\n\n" + summarize(renderPrompt(step.prompt, transcript)) + "\n\n";
+                QElapsedTimer completionTimer;
+                completionTimer.start();
+                lastCompletionTokens_ = 0;
+                const QString result = summarize(renderPrompt(step.prompt, transcript));
+                const double elapsedSeconds = completionTimer.elapsed() / 1000.0;
+                if (lastCompletionTokens_ > 0 && elapsedSeconds > 0.0) {
+                    emit activityUpdated(QString("  Running step: %1 (%2 tokens/s)")
+                                         .arg(step.name)
+                                         .arg(lastCompletionTokens_ / elapsedSeconds, 0, 'f', 1));
+                }
+                section += "## " + step.name + "\n\n" + result + "\n\n";
             }
             section += "---\n";
             QFile summary(summaryPath);

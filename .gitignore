@@ -1,3 +1,7 @@
+# Downloaded model weights (bundled at build time, never committed)
+models/*.bin
+models/*.part
+
 # Build and package output
 build*/
 AudioFall.app/
