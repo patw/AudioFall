@@ -3,6 +3,12 @@
 #include "pipeline.h"
 #include "wav.h"
 #include <QtTest>
+#include <QApplication>
+#include <QComboBox>
+#include <QLabel>
+#include <QPlainTextEdit>
+#include <QPushButton>
+#include <QScopeGuard>
 #include <QFile>
 #include <QSignalSpy>
 #include <QThread>
@@ -46,6 +52,57 @@ class AudioFallTests : public QObject {
 private slots:
     void init() { setConfigPathForTesting({}); }
     void cleanup() { setConfigPathForTesting({}); }
+
+    void windowFollowsSystemPalette_data() {
+        QTest::addColumn<bool>("dark");
+        QTest::newRow("light-to-dark") << false;
+        QTest::newRow("dark-to-light") << true;
+    }
+
+    void windowFollowsSystemPalette() {
+        QFETCH(bool, dark);
+        const QPalette original = QApplication::palette();
+        const auto restorePalette = qScopeGuard([original] {
+            QApplication::setPalette(original);
+        });
+        QTemporaryDir dir;
+        setConfigPathForTesting(dir.filePath("config.json"));
+
+        auto systemPalette = [](bool darkMode) {
+            QPalette palette;
+            for (auto group : {QPalette::Active, QPalette::Inactive, QPalette::Disabled}) {
+                palette.setColor(group, QPalette::Window, darkMode ? QColor("#292929") : QColor("#ececec"));
+                palette.setColor(group, QPalette::WindowText, darkMode ? QColor("#eeeeee") : QColor("#202020"));
+                palette.setColor(group, QPalette::Base, darkMode ? QColor("#181818") : QColor("#ffffff"));
+                palette.setColor(group, QPalette::Text, darkMode ? QColor("#eeeeee") : QColor("#202020"));
+                palette.setColor(group, QPalette::Button, darkMode ? QColor("#383838") : QColor("#e0e0e0"));
+                palette.setColor(group, QPalette::ButtonText, darkMode ? QColor("#eeeeee") : QColor("#202020"));
+            }
+            return palette;
+        };
+        QApplication::setPalette(systemPalette(dark));
+        MainWindow window;
+        auto verifyPalette = [&window](const QPalette &expected) {
+            QVERIFY(!window.centralWidget()->testAttribute(Qt::WA_SetPalette));
+            for (auto group : {QPalette::Active, QPalette::Inactive, QPalette::Disabled}) {
+                QCOMPARE(window.centralWidget()->palette().color(group, QPalette::Window), expected.color(group, QPalette::Window));
+                for (auto *label : window.findChildren<QLabel *>())
+                    QCOMPARE(label->palette().color(group, QPalette::WindowText), expected.color(group, QPalette::WindowText));
+                for (auto *button : window.findChildren<QPushButton *>())
+                    QCOMPARE(button->palette().color(group, QPalette::ButtonText), expected.color(group, QPalette::ButtonText));
+                for (auto *combo : window.findChildren<QComboBox *>())
+                    QCOMPARE(combo->palette().color(group, QPalette::ButtonText), expected.color(group, QPalette::ButtonText));
+                for (auto *editor : window.findChildren<QPlainTextEdit *>()) {
+                    QCOMPARE(editor->palette().color(group, QPalette::Base), expected.color(group, QPalette::Base));
+                    QCOMPARE(editor->palette().color(group, QPalette::Text), expected.color(group, QPalette::Text));
+                }
+            }
+        };
+        verifyPalette(systemPalette(dark));
+        QApplication::setPalette(systemPalette(!dark));
+        QApplication::processEvents(); // ApplicationPaletteChange is delivered via the event loop.
+        verifyPalette(systemPalette(!dark));
+    }
 
     void longSilenceIsRemoved() {
         QTemporaryDir dir;

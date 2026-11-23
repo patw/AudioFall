@@ -4,7 +4,6 @@
 #include "recorder.h"
 #include <QAudioDevice>
 #include <QCloseEvent>
-#include <QColor>
 #include <QComboBox>
 #include <QDialog>
 #include <QDir>
@@ -20,7 +19,6 @@
 #include <QLineEdit>
 #include <QMediaDevices>
 #include <QMessageBox>
-#include <QPalette>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QTextEdit>
@@ -39,12 +37,9 @@ MainWindow::MainWindow() : config_(loadConfig()), recorder_(new Recorder(this)) 
     setMinimumWidth(500);
 
     auto *central = new QWidget(this);
-    // PyQt5's macOS widget window uses a light system-gray content surface;
-    // Qt6 otherwise renders this central widget as pure white.
-    QPalette centralPalette = central->palette();
-    centralPalette.setColor(QPalette::Window, QColor("#ECECEC"));
-    central->setPalette(centralPalette);
-    central->setAutoFillBackground(true);
+    // Inherit the system palette for both surfaces and controls. Overriding
+    // only Window with a light color leaves dark-mode text unreadable and
+    // prevents the surface from following live appearance changes.
     auto *layout = new QVBoxLayout(central);
 
     layout->addWidget(new QLabel("Activity"));
